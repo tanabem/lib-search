@@ -868,11 +868,11 @@ async function fetchCiNii(q) {
 }
 
 // ─── API: NDL Search ──────────────────────────────────────────────────────────
-// CORS: 対応（SRU）、APIキー不要
+// OpenSearch（RSS）を使用。SRUより名前空間が単純で確実にタイトルを取得できる。
 // Docs: https://ndlsearch.ndl.go.jp/help/api
 
 async function fetchNDL(q) {
-  const url = `https://ndlsearch.ndl.go.jp/api/sru?operation=searchRetrieve&version=1.2&recordSchema=dcndl&maximumRecords=10&query=anywhere%3D%22${encodeURIComponent(q)}%22`;
+  const url = `https://ndlsearch.ndl.go.jp/api/opensearch?cnt=10&any=${encodeURIComponent(q)}`;
 
   const res = await fetch(url);
   if (!res.ok) throw new Error(`NDL API Error: ${res.status}`);
@@ -880,79 +880,49 @@ async function fetchNDL(q) {
   const parser = new DOMParser();
   const xml = parser.parseFromString(text, 'application/xml');
 
-  // 名前空間定義
-  const NS_DC     = 'http://purl.org/dc/elements/1.1/';
-  const NS_DCNDL  = 'http://ndl.go.jp/dcndl/terms/';
-  const NS_DCTERMS= 'http://purl.org/dc/terms/';
-  const NS_RDF    = 'http://www.w3.org/1999/02/22-rdf-syntax-ns#';
-  const NS_RDFS   = 'http://www.w3.org/2000/01/rdf-schema#';
-  const NS_SRW    = 'http://www.loc.gov/zing/srw/';
+  const DC    = 'http://purl.org/dc/elements/1.1/';
+  const DCNDL = 'http://ndl.go.jp/dcndl/terms/';
+  const XSI   = 'http://www.w3.org/2001/XMLSchema-instance';
 
-  // 名前空間を使って要素テキストを取得するヘルパー
-  const getNS = (root, ns, tag) => {
-    const el = root.getElementsByTagNameNS(ns, tag)[0];
-    return el ? el.textContent.trim() : '';
-  };
-  // 名前空間なしのローカル名で検索（フォールバック用）
-  const getLocal = (root, tag) => {
-    const els = root.getElementsByTagName('*');
-    for (const el of els) {
-      if (el.localName === tag) return el.textContent.trim();
-    }
-    return '';
-  };
+  const getTag   = (el, tag) => el.getElementsByTagName(tag)[0]?.textContent.trim() || '';
+  const getDC    = (el, tag) => el.getElementsByTagNameNS(DC, tag)[0]?.textContent.trim() || '';
+  const getDCNDL = (el, tag) => el.getElementsByTagNameNS(DCNDL, tag)[0]?.textContent.trim() || '';
 
-  const totalEl = xml.getElementsByTagNameNS(NS_SRW, 'numberOfRecords')[0]
-               || xml.querySelector('numberOfRecords');
+  // totalResults
+  const totalEl = xml.getElementsByTagName('openSearch:totalResults')[0];
   const total = totalEl ? parseInt(totalEl.textContent) : 0;
 
-  const records = xml.getElementsByTagNameNS(NS_SRW, 'record');
+  const items_xml = xml.getElementsByTagName('item');
 
-  const items = Array.from(records).map(rec => {
-    // タイトル: dc:title または dcterms:title
-    const title = getNS(rec, NS_DC, 'title')
-               || getNS(rec, NS_DCTERMS, 'title')
-               || getLocal(rec, 'title')
-               || '（タイトル不明）';
+  const items = Array.from(items_xml).map(item => {
+    // RSSの<title>は名前空間なしで取得できる
+    const title     = getTag(item, 'title') || '（タイトル不明）';
+    const link      = getTag(item, 'link');
+    const creator   = getDC(item, 'creator')   || getDCNDL(item, 'creator');
+    const publisher = getDC(item, 'publisher') || getDCNDL(item, 'publisher');
+    const date      = getDC(item, 'date')      || getDCNDL(item, 'date');
 
-    // 著者: dc:creator
-    const creator = getNS(rec, NS_DC, 'creator')
-                 || getLocal(rec, 'creator');
-
-    // 出版者: dc:publisher
-    const publisher = getNS(rec, NS_DC, 'publisher')
-                   || getLocal(rec, 'publisher');
-
-    // 日付: dc:date または dcterms:issued
-    const date = getNS(rec, NS_DC, 'date')
-              || getNS(rec, NS_DCTERMS, 'issued')
-              || getLocal(rec, 'date');
-
-    // ISBN: dcndl:ISBN または identifier から抽出
-    let isbn = getNS(rec, NS_DCNDL, 'ISBN');
-    if (!isbn) {
-      // identifierの中からISBNらしき数字列を探す
-      const identifiers = rec.getElementsByTagNameNS(NS_DC, 'identifier');
-      for (const id of identifiers) {
-        const val = id.textContent.trim().replace(/-/g, '');
-        if (/^\d{10}$|^\d{13}$/.test(val)) { isbn = val; break; }
+    // ISBN: dc:identifier[@xsi:type="dcndl:ISBN"]
+    let isbn = '';
+    const identifiers = item.getElementsByTagNameNS(DC, 'identifier');
+    for (const id of identifiers) {
+      const type = id.getAttributeNS(XSI, 'type') || '';
+      const val  = id.textContent.trim().replace(/-/g, '');
+      if (type === 'dcndl:ISBN' || /^\d{10}$|^\d{13}$/.test(val)) {
+        isbn = val;
+        break;
       }
     }
 
-    // NDL書誌ID → URL
-    const recIdEl = rec.getElementsByTagName('recordIdentifier')[0];
-    const ndlid = recIdEl ? recIdEl.textContent.trim() : '';
-    const itemUrl = ndlid ? `https://ndlsearch.ndl.go.jp/books/${ndlid}` : '';
-
     const tags = [];
     if (publisher) tags.push({ label: publisher });
-    if (date) tags.push({ label: date });
-    if (isbn) tags.push({ label: 'ISBN: ' + isbn });
+    if (date)      tags.push({ label: date });
+    if (isbn)      tags.push({ label: 'ISBN: ' + isbn });
 
     return {
       title,
       meta: creator,
-      url: itemUrl,
+      url: link,
       tags,
       thumbnail: null,
       isbn: isbn || null,
@@ -998,14 +968,29 @@ async function fetchGBooks(q) {
 
 // ─── API: Semantic Scholar ────────────────────────────────────────────────────
 // CORS: 対応、APIキー不要（制限: 100req/5min）
+// レート超過（429）時は最大3回リトライ
 // Docs: https://api.semanticscholar.org/api-docs/
 
 async function fetchSemantic(q) {
   const fields = 'title,authors,year,venue,externalIds,isOpenAccess,openAccessPdf,publicationTypes';
   const url = `https://api.semanticscholar.org/graph/v1/paper/search?query=${encodeURIComponent(q)}&limit=10&fields=${fields}`;
 
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`Semantic Scholar API Error: ${res.status}`);
+  let res;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    res = await fetch(url, {
+      headers: { 'Accept': 'application/json' }
+    });
+    if (res.status === 429) {
+      // レート制限: 少し待ってリトライ
+      await new Promise(r => setTimeout(r, 2000 * (attempt + 1)));
+      continue;
+    }
+    break;
+  }
+  if (!res.ok) {
+    if (res.status === 429) throw new Error('Semantic Scholar: リクエスト制限中です。しばらく待ってから再試行してください。');
+    throw new Error(`Semantic Scholar API Error: ${res.status}`);
+  }
   const data = await res.json();
 
   const items = (data.data || []).map(p => {
@@ -1017,7 +1002,6 @@ async function fetchSemantic(q) {
 
     const paperId = p.paperId;
     const doi = p.externalIds?.DOI;
-    const pdfUrl = p.openAccessPdf?.url || null;
 
     return {
       title: p.title,
