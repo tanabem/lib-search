@@ -585,11 +585,11 @@ const SOURCES = [
   { id: 'cinii',    label: 'CiNii Research',    badge: 'badge-cinii',    needsKey: true  },
   { id: 'ndl',      label: 'NDL Search',         badge: 'badge-ndl',      needsKey: false },
   { id: 'gbooks',   label: 'Google Books',       badge: 'badge-gbooks',   needsKey: false },
-  { id: 'semantic', label: 'Semantic Scholar',   badge: 'badge-semantic', needsKey: false },
+  { id: 'openalex', label: 'OpenAlex',           badge: 'badge-semantic', needsKey: false },
   { id: 'calil',    label: 'カーリル（蔵書確認）', badge: 'badge-calil',    needsKey: true  },
 ];
 
-let activeToggles = { cinii: true, ndl: true, gbooks: true, semantic: true, calil: false };
+let activeToggles = { cinii: true, ndl: true, gbooks: true, openalex: true, calil: false };
 let state = { results: {}, loading: {}, pages: {} };
 
 // ─── INIT ──────────────────────────────────────────────────────────────────────
@@ -672,7 +672,7 @@ async function doSearch() {
     cinii:    () => fetchCiNii(q),
     ndl:      () => fetchNDL(q),
     gbooks:   () => fetchGBooks(q),
-    semantic: () => fetchSemantic(q),
+    openalex: () => fetchOpenAlex(q),
     calil:    () => fetchCalil(q),
   };
 
@@ -966,54 +966,60 @@ async function fetchGBooks(q) {
   return { total_count: data.totalItems || items.length, items };
 }
 
-// ─── API: Semantic Scholar ────────────────────────────────────────────────────
-// CORS: 対応、APIキー不要（制限: 100req/5min）
-// レート超過（429）時は最大3回リトライ
-// Docs: https://api.semanticscholar.org/api-docs/
+// ─── API: OpenAlex ───────────────────────────────────────────────────────────
+// CORS: 対応済み（Access-Control-Allow-Origin: *）、APIキー不要
+// Docs: https://docs.openalex.org/
 
-async function fetchSemantic(q) {
-  const fields = 'title,authors,year,venue,externalIds,isOpenAccess,openAccessPdf,publicationTypes';
-  const url = `https://api.semanticscholar.org/graph/v1/paper/search?query=${encodeURIComponent(q)}&limit=10&fields=${fields}`;
+async function fetchOpenAlex(q) {
+  const url = `https://api.openalex.org/works?search=${encodeURIComponent(q)}&per-page=10&mailto=lib-search@example.com`;
 
-  let res;
-  for (let attempt = 0; attempt < 3; attempt++) {
-    res = await fetch(url, {
-      headers: { 'Accept': 'application/json' }
-    });
-    if (res.status === 429) {
-      // レート制限: 少し待ってリトライ
-      await new Promise(r => setTimeout(r, 2000 * (attempt + 1)));
-      continue;
-    }
-    break;
-  }
-  if (!res.ok) {
-    if (res.status === 429) throw new Error('Semantic Scholar: リクエスト制限中です。しばらく待ってから再試行してください。');
-    throw new Error(`Semantic Scholar API Error: ${res.status}`);
-  }
+  const res = await fetch(url, {
+    headers: { 'Accept': 'application/json' }
+  });
+  if (!res.ok) throw new Error(`OpenAlex API Error: ${res.status}`);
   const data = await res.json();
 
-  const items = (data.data || []).map(p => {
+  const items = (data.results || []).map(p => {
     const tags = [];
-    if (p.venue) tags.push({ label: p.venue });
-    if (p.year) tags.push({ label: String(p.year) });
-    if (p.publicationTypes && p.publicationTypes.length) tags.push({ label: p.publicationTypes[0], type: true });
-    if (p.isOpenAccess) tags.push({ label: '🔓 Open Access' });
 
-    const paperId = p.paperId;
-    const doi = p.externalIds?.DOI;
+    // 掲載誌
+    const venue = p.primary_location?.source?.display_name;
+    if (venue) tags.push({ label: venue });
+
+    // 出版年
+    if (p.publication_year) tags.push({ label: String(p.publication_year) });
+
+    // 文献種別
+    if (p.type) tags.push({ label: p.type, type: true });
+
+    // OA
+    if (p.open_access?.is_oa) tags.push({ label: '🔓 Open Access' });
+
+    // URL: DOI優先、なければOpenAlexページ
+    const doi = p.doi ? p.doi.replace('https://doi.org/', '') : null;
+    const url_out = p.doi || p.id || '';
+
+    // 著者
+    const authors = (p.authorships || [])
+      .slice(0, 5)
+      .map(a => a.author?.display_name)
+      .filter(Boolean)
+      .join(', ');
 
     return {
-      title: p.title,
-      meta: (p.authors || []).map(a => a.name).join(', '),
-      url: doi ? `https://doi.org/${doi}` : (paperId ? `https://www.semanticscholar.org/paper/${paperId}` : ''),
+      title: p.title || '（タイトル不明）',
+      meta: authors,
+      url: url_out,
       tags,
       thumbnail: null,
       isbn: null,
     };
   });
 
-  return { total_count: data.total || items.length, items };
+  return {
+    total_count: data.meta?.count || items.length,
+    items,
+  };
 }
 
 // ─── API: カーリル ────────────────────────────────────────────────────────────
