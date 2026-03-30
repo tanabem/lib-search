@@ -1,0 +1,1092 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LibSearch — 統合文献検索</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700&family=DM+Serif+Display:ital@0;1&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink: #1a1814;
+    --ink2: #3d3a34;
+    --ink3: #7a7670;
+    --paper: #f7f4ef;
+    --paper2: #eeeae2;
+    --paper3: #e2ddd4;
+    --accent: #b5400a;
+    --accent2: #e85c1a;
+    --gold: #c8962a;
+    --success: #2a7a4a;
+    --border: rgba(26,24,20,0.12);
+    --border2: rgba(26,24,20,0.06);
+    --shadow: 0 2px 12px rgba(26,24,20,0.08);
+    --shadow2: 0 8px 40px rgba(26,24,20,0.14);
+    --r: 4px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Noto Sans JP', sans-serif;
+    background: var(--paper);
+    color: var(--ink);
+    min-height: 100vh;
+    font-size: 14px;
+  }
+
+  /* ── HEADER ── */
+  header {
+    background: var(--ink);
+    color: var(--paper);
+    padding: 0 32px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 56px;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    border-bottom: 2px solid var(--accent);
+  }
+  .logo {
+    font-family: 'DM Serif Display', serif;
+    font-size: 22px;
+    letter-spacing: 0.02em;
+    color: #f7f4ef;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .logo span { color: var(--accent2); font-style: italic; }
+  .header-tag {
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    color: var(--ink3);
+    text-transform: uppercase;
+    border: 1px solid #444;
+    padding: 2px 8px;
+    border-radius: 2px;
+  }
+
+  /* ── SEARCH AREA ── */
+  .search-zone {
+    background: var(--ink);
+    padding: 32px 32px 28px;
+    border-bottom: 1px solid #2a2820;
+  }
+  .search-bar {
+    display: flex;
+    gap: 0;
+    max-width: 760px;
+    margin: 0 auto 16px;
+    box-shadow: var(--shadow2);
+  }
+  .search-bar input {
+    flex: 1;
+    height: 52px;
+    padding: 0 20px;
+    font-size: 16px;
+    font-family: 'Noto Sans JP', sans-serif;
+    border: none;
+    background: #fff;
+    color: var(--ink);
+    outline: none;
+    border-radius: var(--r) 0 0 var(--r);
+  }
+  .search-bar input::placeholder { color: #aaa; }
+  .search-bar button {
+    height: 52px;
+    padding: 0 28px;
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    font-family: 'Noto Sans JP', sans-serif;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    letter-spacing: 0.06em;
+    border-radius: 0 var(--r) var(--r) 0;
+    transition: background 0.15s;
+    white-space: nowrap;
+  }
+  .search-bar button:hover { background: var(--accent2); }
+
+  /* Source toggles */
+  .source-row {
+    display: flex;
+    gap: 8px;
+    max-width: 760px;
+    margin: 0 auto;
+    flex-wrap: wrap;
+  }
+  .src-toggle {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 12px;
+    border-radius: 20px;
+    border: 1px solid #3a3830;
+    background: transparent;
+    color: #bbb;
+    font-family: 'Noto Sans JP', sans-serif;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.15s;
+    user-select: none;
+  }
+  .src-toggle.active {
+    border-color: var(--accent);
+    background: rgba(181,64,10,0.18);
+    color: #f5c8a8;
+  }
+  .src-toggle .dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: currentColor;
+    flex-shrink: 0;
+  }
+
+  /* API key notice */
+  .key-notice {
+    max-width: 760px;
+    margin: 10px auto 0;
+    font-size: 11px;
+    color: #7a7060;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .key-notice a { color: var(--gold); text-decoration: none; }
+  .key-notice a:hover { text-decoration: underline; }
+
+  /* ── SETTINGS PANEL ── */
+  .settings-bar {
+    background: var(--paper2);
+    border-bottom: 1px solid var(--border);
+    padding: 0 32px;
+    display: flex;
+    align-items: center;
+    gap: 0;
+    overflow-x: auto;
+  }
+  .settings-btn {
+    padding: 10px 16px;
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: var(--ink3);
+    font-family: 'Noto Sans JP', sans-serif;
+    font-size: 12px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.15s;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+  .settings-btn.active {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+    font-weight: 500;
+  }
+  .settings-btn:hover { color: var(--ink); }
+
+  /* Key Config Panel */
+  .key-panel {
+    display: none;
+    background: var(--paper2);
+    border-bottom: 1px solid var(--border);
+    padding: 16px 32px;
+  }
+  .key-panel.open { display: block; }
+  .key-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 10px;
+    max-width: 900px;
+  }
+  .key-field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .key-field label {
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--ink3);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+  .key-field input {
+    height: 34px;
+    padding: 0 10px;
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    background: #fff;
+    font-family: 'Noto Sans JP', sans-serif;
+    font-size: 12px;
+    color: var(--ink);
+    outline: none;
+    font-family: monospace;
+  }
+  .key-field input:focus { border-color: var(--accent); }
+  .key-save-btn {
+    margin-top: 10px;
+    padding: 7px 20px;
+    background: var(--ink);
+    color: var(--paper);
+    border: none;
+    border-radius: var(--r);
+    font-family: 'Noto Sans JP', sans-serif;
+    font-size: 12px;
+    cursor: pointer;
+    font-weight: 500;
+  }
+  .key-save-btn:hover { background: var(--ink2); }
+
+  /* ── MAIN LAYOUT ── */
+  .main {
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 24px 24px 60px;
+  }
+
+  /* ── STATUS ROW ── */
+  .status-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .result-count {
+    font-size: 13px;
+    color: var(--ink3);
+  }
+  .result-count strong { color: var(--ink); font-weight: 500; }
+  .source-filters {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+  .sf-btn {
+    padding: 3px 10px;
+    border-radius: 20px;
+    border: 1px solid var(--border);
+    background: #fff;
+    color: var(--ink3);
+    font-size: 11px;
+    cursor: pointer;
+    font-family: 'Noto Sans JP', sans-serif;
+    transition: all 0.12s;
+  }
+  .sf-btn.on { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+  .sf-btn:hover { border-color: var(--ink3); color: var(--ink); }
+
+  /* ── SOURCE SECTIONS ── */
+  .source-section { margin-bottom: 32px; }
+  .source-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+  }
+  .source-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 10px;
+    border-radius: 2px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    border-left: 3px solid;
+  }
+  .badge-cinii    { background: #e8eef8; color: #1a4a8a; border-color: #2a6acd; }
+  .badge-ndl      { background: #f0e8f8; color: #5a1a8a; border-color: #8a3ace; }
+  .badge-calil    { background: #e8f4f0; color: #1a6a4a; border-color: #2aaa7a; }
+  .badge-gbooks   { background: #fff4e0; color: #7a4a00; border-color: #e8a020; }
+  .badge-semantic { background: #f8e8e8; color: #8a1a1a; border-color: #cc3030; }
+  .source-loading {
+    font-size: 12px;
+    color: var(--ink3);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .spinner {
+    width: 14px; height: 14px;
+    border: 2px solid var(--border);
+    border-top-color: var(--ink3);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    flex-shrink: 0;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .source-count { font-size: 12px; color: var(--ink3); }
+
+  /* ── RESULT CARDS ── */
+  .result-list { display: flex; flex-direction: column; gap: 1px; }
+  .result-card {
+    background: #fff;
+    border: 1px solid var(--border2);
+    border-radius: var(--r);
+    padding: 14px 16px;
+    transition: box-shadow 0.15s, border-color 0.15s;
+    display: flex;
+    gap: 14px;
+  }
+  .result-card:hover {
+    box-shadow: var(--shadow);
+    border-color: var(--border);
+  }
+  .result-thumb {
+    width: 52px;
+    flex-shrink: 0;
+  }
+  .result-thumb img {
+    width: 52px;
+    height: 72px;
+    object-fit: cover;
+    border-radius: 2px;
+    border: 1px solid var(--border2);
+    display: block;
+  }
+  .thumb-placeholder {
+    width: 52px;
+    height: 72px;
+    background: var(--paper2);
+    border-radius: 2px;
+    border: 1px solid var(--border2);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--paper3);
+    font-size: 20px;
+  }
+  .result-body { flex: 1; min-width: 0; }
+  .result-title {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--ink);
+    line-height: 1.45;
+    margin-bottom: 4px;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  .result-title a {
+    color: inherit;
+    text-decoration: none;
+  }
+  .result-title a:hover { color: var(--accent); }
+  .result-meta {
+    font-size: 12px;
+    color: var(--ink3);
+    margin-bottom: 6px;
+    display: -webkit-box;
+    -webkit-line-clamp: 1;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  .result-tags {
+    display: flex;
+    gap: 5px;
+    flex-wrap: wrap;
+    margin-top: 6px;
+  }
+  .tag {
+    padding: 1px 7px;
+    background: var(--paper2);
+    border-radius: 2px;
+    font-size: 10px;
+    color: var(--ink3);
+    border: 1px solid var(--border2);
+    white-space: nowrap;
+  }
+  .tag-type { background: var(--paper3); color: var(--ink2); }
+
+  /* ── CALIL AVAILABILITY ── */
+  .calil-zone {
+    margin-top: 8px;
+    padding: 8px 10px;
+    background: var(--paper2);
+    border-radius: var(--r);
+    border: 1px solid var(--border2);
+    font-size: 11px;
+  }
+  .calil-zone-title {
+    font-weight: 500;
+    color: var(--ink3);
+    margin-bottom: 4px;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+  .calil-btn {
+    margin-top: 6px;
+    padding: 4px 12px;
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: 2px;
+    font-size: 11px;
+    font-family: 'Noto Sans JP', sans-serif;
+    color: var(--ink2);
+    cursor: pointer;
+    transition: all 0.12s;
+  }
+  .calil-btn:hover { background: var(--paper3); }
+  .lib-list { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+  .lib-item {
+    padding: 2px 8px;
+    border-radius: 2px;
+    font-size: 11px;
+    font-weight: 500;
+  }
+  .lib-ok { background: #d4f0e0; color: #1a5a30; }
+  .lib-none { background: #f0d4d4; color: #5a1a1a; }
+  .lib-running { background: #fff4d0; color: #6a4a00; }
+  .lib-unknown { background: var(--paper3); color: var(--ink3); }
+
+  /* ── EMPTY / ERROR ── */
+  .empty-msg {
+    text-align: center;
+    padding: 60px 20px;
+    color: var(--ink3);
+  }
+  .empty-msg .big { font-family: 'DM Serif Display', serif; font-size: 40px; color: var(--paper3); margin-bottom: 12px; }
+  .empty-msg p { font-size: 14px; }
+
+  .error-card {
+    background: #fff8f6;
+    border: 1px solid #f0c8b8;
+    border-radius: var(--r);
+    padding: 10px 14px;
+    font-size: 12px;
+    color: #8a3010;
+  }
+
+  /* ── PAGINATION ── */
+  .pagination {
+    display: flex;
+    gap: 4px;
+    justify-content: center;
+    margin-top: 16px;
+    flex-wrap: wrap;
+  }
+  .page-btn {
+    width: 34px; height: 34px;
+    display: flex; align-items: center; justify-content: center;
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    background: #fff;
+    color: var(--ink3);
+    font-size: 13px;
+    cursor: pointer;
+    font-family: 'Noto Sans JP', sans-serif;
+    transition: all 0.12s;
+  }
+  .page-btn.current { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+  .page-btn:hover:not(.current) { border-color: var(--ink3); color: var(--ink); }
+
+  /* ── TOAST ── */
+  .toast {
+    position: fixed;
+    bottom: 24px; right: 24px;
+    background: var(--ink);
+    color: var(--paper);
+    padding: 10px 18px;
+    border-radius: var(--r);
+    font-size: 13px;
+    box-shadow: var(--shadow2);
+    opacity: 0;
+    transform: translateY(10px);
+    transition: all 0.2s;
+    z-index: 1000;
+  }
+  .toast.show { opacity: 1; transform: translateY(0); }
+
+  /* Responsive */
+  @media (max-width: 600px) {
+    header { padding: 0 16px; }
+    .search-zone { padding: 20px 16px 16px; }
+    .main { padding: 16px; }
+    .settings-bar { padding: 0 16px; }
+    .key-panel { padding: 12px 16px; }
+    .result-card { flex-direction: column; gap: 8px; }
+    .result-thumb { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">Lib<span>Search</span></div>
+  <div class="header-tag">統合文献検索</div>
+</header>
+
+<div class="search-zone">
+  <div class="search-bar">
+    <input type="text" id="query" placeholder="書名・著者名・キーワードを入力..." autocomplete="off" />
+    <button onclick="doSearch()">検索</button>
+  </div>
+  <div class="source-row" id="sourceToggles"></div>
+  <div class="key-notice">
+    <span>🔑</span>
+    <span>CiNii・カーリルにはAPIキーが必要です。</span>
+    <a href="#" onclick="openKeyPanel(); return false;">APIキーを設定</a>
+    &nbsp;|&nbsp; NDL・Google Books・Semantic Scholarはキー不要
+  </div>
+</div>
+
+<div class="settings-bar">
+  <button class="settings-btn" id="keyPanelBtn" onclick="toggleKeyPanel()">⚙ APIキー設定</button>
+  <button class="settings-btn active" onclick="">結果一覧</button>
+</div>
+
+<div class="key-panel" id="keyPanel">
+  <div class="key-grid">
+    <div class="key-field">
+      <label>CiNii Research APIキー（appid）</label>
+      <input type="text" id="key_cinii" placeholder="例: xxxxxxxxxxxxxxxx" />
+    </div>
+    <div class="key-field">
+      <label>カーリル APIキー</label>
+      <input type="text" id="key_calil" placeholder="例: xxxxxxxxxxxxxxxxxxxxxxxx" />
+    </div>
+    <div class="key-field">
+      <label>カーリル 図書館システムID（prefcode等）</label>
+      <input type="text" id="key_calil_sys" placeholder="例: Tokyo_Pref" />
+      <span style="font-size:10px;color:var(--ink3)">カーリルAPIドキュメントで確認できます</span>
+    </div>
+  </div>
+  <button class="key-save-btn" onclick="saveKeys()">💾 保存（localStorageに記録）</button>
+</div>
+
+<div class="main" id="main">
+  <div class="empty-msg">
+    <div class="big">📚</div>
+    <p>検索キーワードを入力して検索ボタンを押してください</p>
+    <p style="margin-top:8px;font-size:12px;color:var(--ink3)">CiNii Research・NDL・カーリル・Google Books・Semantic Scholar を横断検索</p>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ─── CONFIG ───────────────────────────────────────────────────────────────────
+
+const SOURCES = [
+  { id: 'cinii',    label: 'CiNii Research',    badge: 'badge-cinii',    needsKey: true  },
+  { id: 'ndl',      label: 'NDL Search',         badge: 'badge-ndl',      needsKey: false },
+  { id: 'gbooks',   label: 'Google Books',       badge: 'badge-gbooks',   needsKey: false },
+  { id: 'semantic', label: 'Semantic Scholar',   badge: 'badge-semantic', needsKey: false },
+  { id: 'calil',    label: 'カーリル（蔵書確認）', badge: 'badge-calil',    needsKey: true  },
+];
+
+let activeToggles = { cinii: true, ndl: true, gbooks: true, semantic: true, calil: false };
+let state = { results: {}, loading: {}, pages: {} };
+
+// ─── INIT ──────────────────────────────────────────────────────────────────────
+
+function init() {
+  loadKeys();
+  renderToggles();
+  document.getElementById('query').addEventListener('keydown', e => {
+    if (e.key === 'Enter') doSearch();
+  });
+}
+
+function loadKeys() {
+  ['cinii','calil','calil_sys'].forEach(k => {
+    const el = document.getElementById('key_' + k);
+    if (el) el.value = localStorage.getItem('lskey_' + k) || '';
+  });
+}
+
+function saveKeys() {
+  ['cinii','calil','calil_sys'].forEach(k => {
+    const el = document.getElementById('key_' + k);
+    if (el) localStorage.setItem('lskey_' + k, el.value.trim());
+  });
+  showToast('APIキーを保存しました');
+  toggleKeyPanel();
+}
+
+function openKeyPanel() {
+  document.getElementById('keyPanel').classList.add('open');
+  document.getElementById('keyPanelBtn').classList.add('active');
+}
+function toggleKeyPanel() {
+  const p = document.getElementById('keyPanel');
+  const b = document.getElementById('keyPanelBtn');
+  const isOpen = p.classList.toggle('open');
+  b.classList.toggle('active', isOpen);
+}
+
+function renderToggles() {
+  const container = document.getElementById('sourceToggles');
+  container.innerHTML = '';
+  SOURCES.forEach(src => {
+    const btn = document.createElement('button');
+    btn.className = 'src-toggle' + (activeToggles[src.id] ? ' active' : '');
+    btn.innerHTML = `<span class="dot"></span>${src.label}`;
+    btn.onclick = () => {
+      activeToggles[src.id] = !activeToggles[src.id];
+      btn.classList.toggle('active', activeToggles[src.id]);
+    };
+    container.appendChild(btn);
+  });
+}
+
+// ─── SEARCH ORCHESTRATOR ──────────────────────────────────────────────────────
+
+async function doSearch() {
+  const q = document.getElementById('query').value.trim();
+  if (!q) return;
+  state = { results: {}, loading: {}, pages: {} };
+
+  const main = document.getElementById('main');
+  main.innerHTML = '';
+
+  const activeIds = SOURCES.filter(s => activeToggles[s.id]);
+  if (activeIds.length === 0) {
+    main.innerHTML = '<div class="error-card">検索するソースが選択されていません。</div>';
+    return;
+  }
+
+  // Render loading skeletons
+  activeIds.forEach(src => {
+    state.loading[src.id] = true;
+    state.results[src.id] = null;
+    main.appendChild(buildSection(src, null, true));
+  });
+
+  // Fire all searches in parallel
+  const fetchers = {
+    cinii:    () => fetchCiNii(q),
+    ndl:      () => fetchNDL(q),
+    gbooks:   () => fetchGBooks(q),
+    semantic: () => fetchSemantic(q),
+    calil:    () => fetchCalil(q),
+  };
+
+  const promises = activeIds.map(async src => {
+    try {
+      const results = await fetchers[src.id]();
+      state.loading[src.id] = false;
+      state.results[src.id] = results;
+    } catch(e) {
+      state.loading[src.id] = false;
+      state.results[src.id] = { error: e.message };
+    }
+    const section = document.getElementById('sec_' + src.id);
+    if (section) {
+      section.replaceWith(buildSection(src, state.results[src.id], false));
+    }
+  });
+
+  await Promise.all(promises);
+}
+
+// ─── SECTION BUILDER ─────────────────────────────────────────────────────────
+
+function buildSection(src, data, loading) {
+  const sec = document.createElement('div');
+  sec.className = 'source-section';
+  sec.id = 'sec_' + src.id;
+
+  // Header
+  const hdr = document.createElement('div');
+  hdr.className = 'source-header';
+  const badge = document.createElement('span');
+  badge.className = `source-badge ${src.badge}`;
+  badge.textContent = src.label;
+  hdr.appendChild(badge);
+
+  if (loading) {
+    const ld = document.createElement('span');
+    ld.className = 'source-loading';
+    ld.innerHTML = '<span class="spinner"></span>検索中...';
+    hdr.appendChild(ld);
+  } else if (data && data.error) {
+    const err = document.createElement('span');
+    err.style.cssText = 'font-size:12px;color:#aa3010;';
+    err.textContent = '⚠ ' + data.error;
+    hdr.appendChild(err);
+  } else if (data && data.items) {
+    const cnt = document.createElement('span');
+    cnt.className = 'source-count';
+    cnt.textContent = `${data.total_count !== undefined ? data.total_count.toLocaleString() + ' 件' : data.items.length + ' 件'}`;
+    hdr.appendChild(cnt);
+  }
+  sec.appendChild(hdr);
+
+  // Body
+  if (loading) {
+    sec.appendChild(makeSkeletons(3));
+  } else if (!data || data.error) {
+    // already shown in header
+  } else if (data.items && data.items.length > 0) {
+    const list = document.createElement('div');
+    list.className = 'result-list';
+    data.items.forEach(item => {
+      list.appendChild(buildCard(item, src.id));
+    });
+    sec.appendChild(list);
+  } else {
+    const none = document.createElement('div');
+    none.style.cssText = 'font-size:13px;color:var(--ink3);padding:12px 0;';
+    none.textContent = '該当する結果が見つかりませんでした。';
+    sec.appendChild(none);
+  }
+
+  return sec;
+}
+
+function makeSkeletons(n) {
+  const frag = document.createDocumentFragment();
+  const list = document.createElement('div');
+  list.className = 'result-list';
+  for (let i = 0; i < n; i++) {
+    const c = document.createElement('div');
+    c.className = 'result-card';
+    c.innerHTML = `
+      <div class="result-thumb"><div class="thumb-placeholder" style="background:var(--paper2);border:none;"></div></div>
+      <div class="result-body">
+        <div style="height:14px;background:var(--paper2);border-radius:2px;margin-bottom:6px;width:${60+Math.random()*30}%;"></div>
+        <div style="height:12px;background:var(--paper2);border-radius:2px;width:${40+Math.random()*30}%;"></div>
+      </div>`;
+    list.appendChild(c);
+  }
+  frag.appendChild(list);
+  return frag;
+}
+
+function buildCard(item, srcId) {
+  const card = document.createElement('div');
+  card.className = 'result-card';
+
+  // Thumbnail
+  const thumbDiv = document.createElement('div');
+  thumbDiv.className = 'result-thumb';
+  if (item.thumbnail) {
+    const img = document.createElement('img');
+    img.src = item.thumbnail;
+    img.alt = '';
+    img.onerror = function(){ this.parentNode.innerHTML = '<div class="thumb-placeholder">📄</div>'; };
+    thumbDiv.appendChild(img);
+  } else {
+    thumbDiv.innerHTML = '<div class="thumb-placeholder">📄</div>';
+  }
+  card.appendChild(thumbDiv);
+
+  // Body
+  const body = document.createElement('div');
+  body.className = 'result-body';
+
+  const title = document.createElement('div');
+  title.className = 'result-title';
+  if (item.url) {
+    title.innerHTML = `<a href="${item.url}" target="_blank" rel="noopener">${escHtml(item.title || '（タイトル不明）')}</a>`;
+  } else {
+    title.textContent = item.title || '（タイトル不明）';
+  }
+  body.appendChild(title);
+
+  if (item.meta) {
+    const meta = document.createElement('div');
+    meta.className = 'result-meta';
+    meta.textContent = item.meta;
+    body.appendChild(meta);
+  }
+
+  if (item.tags && item.tags.length > 0) {
+    const tags = document.createElement('div');
+    tags.className = 'result-tags';
+    item.tags.forEach(t => {
+      const tg = document.createElement('span');
+      tg.className = 'tag' + (t.type ? ' tag-type' : '');
+      tg.textContent = t.label;
+      tags.appendChild(tg);
+    });
+    body.appendChild(tags);
+  }
+
+  // カーリル蔵書確認ボタン（Google Books / NDL のISBNがある場合）
+  if ((srcId === 'gbooks' || srcId === 'ndl') && item.isbn && activeToggles['calil']) {
+    const calilBtnEl = document.createElement('button');
+    calilBtnEl.className = 'calil-btn';
+    calilBtnEl.textContent = '📍 図書館蔵書を確認（カーリル）';
+    calilBtnEl.onclick = () => checkCalilByISBN(item.isbn, body, calilBtnEl);
+    body.appendChild(calilBtnEl);
+  }
+
+  card.appendChild(body);
+  return card;
+}
+
+// ─── API: CiNii Research ──────────────────────────────────────────────────────
+// CORS: 対応（JSONPまたはJSON）
+// Docs: https://support.nii.ac.jp/ja/cir/r_api
+
+async function fetchCiNii(q) {
+  const appid = localStorage.getItem('lskey_cinii') || '';
+  if (!appid) throw new Error('APIキー未設定（APIキー設定から登録してください）');
+
+  const url = `https://cir.nii.ac.jp/opensearch/articles?appid=${encodeURIComponent(appid)}&q=${encodeURIComponent(q)}&count=10&format=json`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`CiNii API Error: ${res.status}`);
+  const data = await res.json();
+
+  const items = (data['items'] || []).map(item => {
+    const tags = [];
+    if (item['dc:type']) tags.push({ label: item['dc:type'], type: true });
+    if (item['prism:publicationName']) tags.push({ label: item['prism:publicationName'] });
+    if (item['prism:publicationDate']) tags.push({ label: item['prism:publicationDate'] });
+
+    const authors = (item['dc:creator'] || []).join(', ');
+    return {
+      title: item['dc:title'],
+      meta: authors || '',
+      url: item['@id'] || '',
+      tags,
+      thumbnail: null,
+      isbn: null,
+    };
+  });
+
+  return {
+    total_count: data['opensearch:totalResults'] || items.length,
+    items,
+  };
+}
+
+// ─── API: NDL Search ──────────────────────────────────────────────────────────
+// CORS: 対応（SRU）、APIキー不要
+// Docs: https://ndlsearch.ndl.go.jp/help/api
+
+async function fetchNDL(q) {
+  const url = `https://ndlsearch.ndl.go.jp/api/sru?operation=searchRetrieve&version=1.2&recordSchema=dcndl&maximumRecords=10&query=title%3D%22${encodeURIComponent(q)}%22%20OR%20creator%3D%22${encodeURIComponent(q)}%22%20OR%20anywhere%3D%22${encodeURIComponent(q)}%22`;
+
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`NDL API Error: ${res.status}`);
+  const text = await res.text();
+  const parser = new DOMParser();
+  const xml = parser.parseFromString(text, 'application/xml');
+
+  const records = xml.querySelectorAll('record');
+  const totalEl = xml.querySelector('numberOfRecords');
+  const total = totalEl ? parseInt(totalEl.textContent) : 0;
+
+  const items = Array.from(records).map(rec => {
+    const NS = { dc:'http://purl.org/dc/elements/1.1/', dcterms:'http://purl.org/dc/terms/', rdfs:'http://www.w3.org/2000/01/rdf-schema#' };
+    const get = (tag, ns) => {
+      const el = rec.getElementsByTagNameNS(ns, tag)[0];
+      return el ? el.textContent.trim() : '';
+    };
+    const title = rec.querySelector('title')?.textContent.trim() || '（タイトル不明）';
+    const creator = rec.querySelector('creator')?.textContent.trim() || '';
+    const publisher = rec.querySelector('publisher')?.textContent.trim() || '';
+    const date = rec.querySelector('date')?.textContent.trim() || '';
+    const isbn = rec.querySelector('identifier[xsi\\:type="dcndl:ISBN"], identifier')?.textContent.trim() || '';
+    const idEl = rec.querySelector('recordIdentifier');
+    const ndlid = idEl ? idEl.textContent.trim() : '';
+    const url = ndlid ? `https://ndlsearch.ndl.go.jp/books/${ndlid}` : '';
+
+    const tags = [];
+    if (publisher) tags.push({ label: publisher });
+    if (date) tags.push({ label: date });
+    if (isbn && isbn.length > 8) tags.push({ label: 'ISBN: ' + isbn });
+
+    return {
+      title,
+      meta: creator,
+      url,
+      tags,
+      thumbnail: null,
+      isbn: isbn && isbn.length > 8 ? isbn.replace(/-/g,'') : null,
+    };
+  });
+
+  return { total_count: total, items };
+}
+
+// ─── API: Google Books ────────────────────────────────────────────────────────
+// CORS: 対応、APIキー不要（ただし使用頻度上限あり）
+// Docs: https://developers.google.com/books/docs/v1/using
+
+async function fetchGBooks(q) {
+  const url = `https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(q)}&maxResults=10&langRestrict=ja`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Google Books API Error: ${res.status}`);
+  const data = await res.json();
+
+  if (!data.items || data.items.length === 0) return { total_count: 0, items: [] };
+
+  const items = data.items.map(v => {
+    const vi = v.volumeInfo || {};
+    const isbn = (vi.industryIdentifiers || []).find(i => i.type === 'ISBN_13' || i.type === 'ISBN_10');
+    const thumb = vi.imageLinks?.thumbnail?.replace('http://', 'https://') || null;
+    const tags = [];
+    if (vi.publisher) tags.push({ label: vi.publisher });
+    if (vi.publishedDate) tags.push({ label: vi.publishedDate });
+    if (vi.categories && vi.categories.length) tags.push({ label: vi.categories[0], type: true });
+
+    return {
+      title: vi.title + (vi.subtitle ? ` — ${vi.subtitle}` : ''),
+      meta: (vi.authors || []).join(', '),
+      url: vi.infoLink || `https://books.google.co.jp/books?id=${v.id}`,
+      tags,
+      thumbnail: thumb,
+      isbn: isbn ? isbn.identifier.replace(/-/g,'') : null,
+    };
+  });
+
+  return { total_count: data.totalItems || items.length, items };
+}
+
+// ─── API: Semantic Scholar ────────────────────────────────────────────────────
+// CORS: 対応、APIキー不要（制限: 100req/5min）
+// Docs: https://api.semanticscholar.org/api-docs/
+
+async function fetchSemantic(q) {
+  const fields = 'title,authors,year,venue,externalIds,isOpenAccess,openAccessPdf,publicationTypes';
+  const url = `https://api.semanticscholar.org/graph/v1/paper/search?query=${encodeURIComponent(q)}&limit=10&fields=${fields}`;
+
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Semantic Scholar API Error: ${res.status}`);
+  const data = await res.json();
+
+  const items = (data.data || []).map(p => {
+    const tags = [];
+    if (p.venue) tags.push({ label: p.venue });
+    if (p.year) tags.push({ label: String(p.year) });
+    if (p.publicationTypes && p.publicationTypes.length) tags.push({ label: p.publicationTypes[0], type: true });
+    if (p.isOpenAccess) tags.push({ label: '🔓 Open Access' });
+
+    const paperId = p.paperId;
+    const doi = p.externalIds?.DOI;
+    const pdfUrl = p.openAccessPdf?.url || null;
+
+    return {
+      title: p.title,
+      meta: (p.authors || []).map(a => a.name).join(', '),
+      url: doi ? `https://doi.org/${doi}` : (paperId ? `https://www.semanticscholar.org/paper/${paperId}` : ''),
+      tags,
+      thumbnail: null,
+      isbn: null,
+    };
+  });
+
+  return { total_count: data.total || items.length, items };
+}
+
+// ─── API: カーリル ────────────────────────────────────────────────────────────
+// CORS: 制限あり（ポーリング方式）
+// Docs: https://calil.jp/doc/api.html
+// 注意: カーリルAPIはポーリングが必要。ここではISBNベースの蔵書確認ボタンとして実装
+
+async function fetchCalil(q) {
+  // カーリルは書名検索ではなくISBN検索のため、
+  // 単体では検索しない（他ソースの結果にボタンとして付与）
+  return { total_count: 0, items: [], note: 'カーリルはISBN経由で各書籍の蔵書確認に使います' };
+}
+
+async function checkCalilByISBN(isbn, bodyEl, btn) {
+  const key = localStorage.getItem('lskey_calil') || '';
+  const sys = localStorage.getItem('lskey_calil_sys') || 'Tokyo_Pref';
+  if (!key) {
+    showToast('カーリルAPIキーが未設定です');
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = '⏳ 確認中...';
+
+  // 1. セッション開始
+  try {
+    const initUrl = `https://api.calil.jp/check?appkey=${encodeURIComponent(key)}&isbn=${encodeURIComponent(isbn)}&systemid=${encodeURIComponent(sys)}&format=json&callback=no`;
+    const res = await fetch(initUrl);
+    if (!res.ok) throw new Error(`カーリル API Error: ${res.status}`);
+    let data = await res.json();
+
+    // 2. ポーリング（continue=1の間）
+    let tries = 0;
+    while (data.continue === 1 && tries < 8) {
+      await sleep(1500);
+      const pollUrl = `https://api.calil.jp/check?appkey=${encodeURIComponent(key)}&session=${data.session}&format=json&callback=no`;
+      const pres = await fetch(pollUrl);
+      data = await pres.json();
+      tries++;
+    }
+
+    // 3. 結果表示
+    const books = data.books || {};
+    btn.remove();
+
+    const zone = document.createElement('div');
+    zone.className = 'calil-zone';
+    zone.innerHTML = '<div class="calil-zone-title">📍 図書館蔵書（カーリル）</div>';
+
+    const libList = document.createElement('div');
+    libList.className = 'lib-list';
+
+    const sysData = books[isbn]?.[sys];
+    if (sysData) {
+      const statusMap = { 'OK':'lib-ok', 'Running':'lib-running', 'Not found':'lib-none', 'Error':'lib-unknown' };
+      Object.entries(sysData.libkey || {}).forEach(([libid, status]) => {
+        const el = document.createElement('span');
+        el.className = 'lib-item ' + (statusMap[status] || 'lib-unknown');
+        el.textContent = libid + ': ' + status;
+        libList.appendChild(el);
+      });
+      if (sysData.reserveurl) {
+        const link = document.createElement('a');
+        link.href = sysData.reserveurl;
+        link.target = '_blank';
+        link.style.cssText = 'font-size:11px;color:var(--accent);margin-left:6px;';
+        link.textContent = '予約する →';
+        libList.appendChild(link);
+      }
+    } else {
+      libList.innerHTML = '<span class="lib-item lib-unknown">蔵書データなし</span>';
+    }
+
+    zone.appendChild(libList);
+    bodyEl.appendChild(zone);
+
+  } catch(e) {
+    btn.disabled = false;
+    btn.textContent = '📍 図書館蔵書を確認（カーリル）';
+    showToast('カーリル: ' + e.message);
+  }
+}
+
+// ─── UTILS ────────────────────────────────────────────────────────────────────
+
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function sleep(ms) {
+  return new Promise(r => setTimeout(r, ms));
+}
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 3000);
+}
+
+// ─── START ────────────────────────────────────────────────────────────────────
+init();
+</script>
+</body>
+</html>
