@@ -564,9 +564,9 @@
       <input type="text" id="key_calil" placeholder="例: xxxxxxxxxxxxxxxxxxxxxxxx" />
     </div>
     <div class="key-field">
-      <label>カーリル 図書館システムID（prefcode等）</label>
-      <input type="text" id="key_calil_sys" placeholder="例: Tokyo_Pref" />
-      <span style="font-size:10px;color:var(--ink3)">カーリルAPIドキュメントで確認できます</span>
+      <label>カーリル システムID（カンマ区切りで複数可）</label>
+      <input type="text" id="key_calil_sys" placeholder="例: Tokyo_Pref,Kanagawa_Pref" />
+      <span style="font-size:10px;color:var(--ink3)"><a href="https://calil.jp/doc/api_ref.html" target="_blank" style="color:var(--gold)">システムID一覧</a>でご確認ください。複数指定可（カンマ区切り）</span>
     </div>
   </div>
   <button class="key-save-btn" onclick="saveKeys()">💾 保存（localStorageに記録）</button>
@@ -696,6 +696,148 @@ async function doSearch() {
   });
 
   await Promise.all(promises);
+
+  // 全検索完了後にカーリル一括確認ボタンを挿入
+  if (activeToggles['calil']) {
+    insertCalilBulkButton();
+  }
+}
+
+function insertCalilBulkButton() {
+  // 全ソースからISBNを収集
+  const isbnSet = new Set();
+  Object.values(state.results).forEach(result => {
+    if (!result || !result.items) return;
+    result.items.forEach(item => {
+      if (item.isbn) isbnSet.add(item.isbn);
+    });
+  });
+  if (isbnSet.size === 0) return;
+
+  const isbns = [...isbnSet];
+  const calilSec = document.getElementById('sec_calil');
+  if (!calilSec) return;
+
+  // 既存ボタンがあれば削除（重複防止）
+  const existing = calilSec.querySelector('.calil-bulk-btn');
+  if (existing) existing.remove();
+
+  const wrap = document.createElement('div');
+  wrap.style.cssText = 'padding:8px 0;';
+
+  const btn = document.createElement('button');
+  btn.className = 'calil-btn calil-bulk-btn';
+  btn.style.cssText = 'font-size:13px;padding:8px 18px;';
+  btn.textContent = `📍 このページのISBN ${isbns.length}件をまとめて図書館検索`;
+  btn.onclick = () => checkCalilBulk(isbns, calilSec, btn);
+  wrap.appendChild(btn);
+
+  const note = document.createElement('div');
+  note.style.cssText = 'font-size:11px;color:var(--ink3);margin-top:4px;';
+  note.textContent = `対象ISBN: ${isbns.slice(0,5).join(', ')}${isbns.length > 5 ? ' …他' + (isbns.length-5) + '件' : ''}`;
+  wrap.appendChild(note);
+
+  calilSec.appendChild(wrap);
+}
+
+async function checkCalilBulk(isbns, calilSec, btn) {
+  const key = localStorage.getItem('lskey_calil') || '';
+  const sys = localStorage.getItem('lskey_calil_sys') || 'Tokyo_Pref';
+  if (!key) { showToast('カーリルAPIキーが未設定です'); return; }
+
+  btn.disabled = true;
+  btn.textContent = '⏳ 確認中...';
+
+  try {
+    // カーリルAPIはISBNを最大100件まで一括指定可能
+    const isbnParam = isbns.join(',');
+    const initUrl = `https://api.calil.jp/check?appkey=${encodeURIComponent(key)}&isbn=${encodeURIComponent(isbnParam)}&systemid=${encodeURIComponent(sys)}&format=json`;
+    let data = await calilJsonp(initUrl);
+
+    let tries = 0;
+    while (data.continue === 1 && tries < 10) {
+      await sleep(1500);
+      const pollUrl = `https://api.calil.jp/check?appkey=${encodeURIComponent(key)}&session=${encodeURIComponent(data.session)}&format=json`;
+      data = await calilJsonp(pollUrl);
+      tries++;
+    }
+
+    // 結果をレンダリング
+    btn.closest('div').remove();
+    renderBulkCalilResult(data.books || {}, sys, calilSec);
+
+  } catch(e) {
+    btn.disabled = false;
+    btn.textContent = `📍 このページのISBN ${isbns.length}件をまとめて図書館検索`;
+    showToast('カーリル: ' + e.message);
+  }
+}
+
+function renderBulkCalilResult(books, sys, calilSec) {
+  const sysIds = sys.split(',').map(s => s.trim()).filter(Boolean);
+
+  const statusClass = (s) => {
+    if (s === '貸出可') return 'lib-ok';
+    if (s === '貸出中' || s === '予約中' || s === '館内のみ') return 'lib-running';
+    if (s === '蔵書なし' || s === 'なし') return 'lib-none';
+    return 'lib-unknown';
+  };
+
+  const container = document.createElement('div');
+  container.style.cssText = 'margin-top:8px;display:flex;flex-direction:column;gap:8px;';
+
+  Object.entries(books).forEach(([isbn, sysList]) => {
+    const card = document.createElement('div');
+    card.className = 'calil-zone';
+
+    const titleEl = document.createElement('div');
+    titleEl.className = 'calil-zone-title';
+    titleEl.textContent = `📚 ISBN: ${isbn}`;
+    card.appendChild(titleEl);
+
+    const libList = document.createElement('div');
+    libList.className = 'lib-list';
+
+    sysIds.forEach(sysId => {
+      const sysData = sysList[sysId];
+      if (!sysData) return;
+
+      if (sysIds.length > 1) {
+        const sysLabel = document.createElement('div');
+        sysLabel.style.cssText = 'font-size:11px;font-weight:500;color:var(--ink3);margin-top:4px;width:100%;';
+        sysLabel.textContent = sysId;
+        libList.appendChild(sysLabel);
+      }
+
+      if (sysData.status === 'OK' && Object.keys(sysData.libkey || {}).length > 0) {
+        Object.entries(sysData.libkey).forEach(([libName, status]) => {
+          const el = document.createElement('span');
+          el.className = 'lib-item ' + statusClass(status);
+          el.textContent = libName + '：' + status;
+          libList.appendChild(el);
+        });
+        if (sysData.reserveurl) {
+          const link = document.createElement('a');
+          link.href = sysData.reserveurl;
+          link.target = '_blank';
+          link.rel = 'noopener';
+          link.style.cssText = 'font-size:11px;color:var(--accent);margin-left:4px;';
+          link.textContent = '予約する →';
+          libList.appendChild(link);
+        }
+      } else {
+        const el = document.createElement('span');
+        el.className = 'lib-item lib-none';
+        el.textContent = '蔵書なし';
+        libList.appendChild(el);
+      }
+    });
+
+    card.appendChild(libList);
+    container.appendChild(card);
+  });
+
+  calilSec.appendChild(container);
 }
 
 // ─── SECTION BUILDER ─────────────────────────────────────────────────────────
@@ -1054,6 +1196,34 @@ async function fetchCalil(q) {
   return { total_count: 0, items: [], note: 'カーリルはISBN経由で各書籍の蔵書確認に使います' };
 }
 
+// カーリルAPIはJSONPのみ対応（CORSヘッダなし）のため、
+// <script>タグを動的生成してJSONPで呼び出す方式を使用
+function calilJsonp(url) {
+  return new Promise((resolve, reject) => {
+    const cbName = 'calilCb_' + Date.now();
+    const script = document.createElement('script');
+    const timer = setTimeout(() => {
+      delete window[cbName];
+      script.remove();
+      reject(new Error('カーリルAPIタイムアウト'));
+    }, 10000);
+    window[cbName] = (data) => {
+      clearTimeout(timer);
+      delete window[cbName];
+      script.remove();
+      resolve(data);
+    };
+    script.src = url + '&callback=' + cbName;
+    script.onerror = () => {
+      clearTimeout(timer);
+      delete window[cbName];
+      script.remove();
+      reject(new Error('カーリルAPIへの接続に失敗しました'));
+    };
+    document.head.appendChild(script);
+  });
+}
+
 async function checkCalilByISBN(isbn, bodyEl, btn) {
   const key = localStorage.getItem('lskey_calil') || '';
   const sys = localStorage.getItem('lskey_calil_sys') || 'Tokyo_Pref';
@@ -1065,20 +1235,17 @@ async function checkCalilByISBN(isbn, bodyEl, btn) {
   btn.disabled = true;
   btn.textContent = '⏳ 確認中...';
 
-  // 1. セッション開始
   try {
-    const initUrl = `https://api.calil.jp/check?appkey=${encodeURIComponent(key)}&isbn=${encodeURIComponent(isbn)}&systemid=${encodeURIComponent(sys)}&format=json&callback=no`;
-    const res = await fetch(initUrl);
-    if (!res.ok) throw new Error(`カーリル API Error: ${res.status}`);
-    let data = await res.json();
+    // 1. セッション開始（JSONP）
+    const initUrl = `https://api.calil.jp/check?appkey=${encodeURIComponent(key)}&isbn=${encodeURIComponent(isbn)}&systemid=${encodeURIComponent(sys)}&format=json`;
+    let data = await calilJsonp(initUrl);
 
     // 2. ポーリング（continue=1の間）
     let tries = 0;
     while (data.continue === 1 && tries < 8) {
       await sleep(1500);
-      const pollUrl = `https://api.calil.jp/check?appkey=${encodeURIComponent(key)}&session=${data.session}&format=json&callback=no`;
-      const pres = await fetch(pollUrl);
-      data = await pres.json();
+      const pollUrl = `https://api.calil.jp/check?appkey=${encodeURIComponent(key)}&session=${encodeURIComponent(data.session)}&format=json`;
+      data = await calilJsonp(pollUrl);
       tries++;
     }
 
@@ -1093,24 +1260,64 @@ async function checkCalilByISBN(isbn, bodyEl, btn) {
     const libList = document.createElement('div');
     libList.className = 'lib-list';
 
-    const sysData = books[isbn]?.[sys];
-    if (sysData) {
-      const statusMap = { 'OK':'lib-ok', 'Running':'lib-running', 'Not found':'lib-none', 'Error':'lib-unknown' };
-      Object.entries(sysData.libkey || {}).forEach(([libid, status]) => {
-        const el = document.createElement('span');
-        el.className = 'lib-item ' + (statusMap[status] || 'lib-unknown');
-        el.textContent = libid + ': ' + status;
-        libList.appendChild(el);
-      });
-      if (sysData.reserveurl) {
-        const link = document.createElement('a');
-        link.href = sysData.reserveurl;
-        link.target = '_blank';
-        link.style.cssText = 'font-size:11px;color:var(--accent);margin-left:6px;';
-        link.textContent = '予約する →';
-        libList.appendChild(link);
+    // libkey の値は日本語ステータス：「貸出可」「貸出中」「館内のみ」「蔵書なし」等
+    const statusClass = (s) => {
+      if (s === '貸出可') return 'lib-ok';
+      if (s === '貸出中' || s === '予約中') return 'lib-running';
+      if (s === '館内のみ') return 'lib-running';
+      if (s === '蔵書なし' || s === 'なし') return 'lib-none';
+      return 'lib-unknown';
+    };
+
+    // 指定した全システムIDを処理
+    const sysIds = sys.split(',').map(s => s.trim()).filter(Boolean);
+    const isbnKey = Object.keys(books)[0] || isbn; // ISBNキーは形式が変わる場合がある
+
+    let hasAny = false;
+    sysIds.forEach(sysId => {
+      const bookEntry = books[isbnKey] || books[isbn] || {};
+      const sysData = bookEntry[sysId];
+      if (!sysData) return;
+
+      // システム名ラベル
+      if (sysIds.length > 1) {
+        const sysLabel = document.createElement('div');
+        sysLabel.style.cssText = 'font-size:11px;font-weight:500;color:var(--ink3);margin-top:4px;width:100%;';
+        sysLabel.textContent = sysId;
+        libList.appendChild(sysLabel);
       }
-    } else {
+
+      if (sysData.status === 'OK' && Object.keys(sysData.libkey || {}).length > 0) {
+        hasAny = true;
+        Object.entries(sysData.libkey).forEach(([libName, status]) => {
+          const el = document.createElement('span');
+          el.className = 'lib-item ' + statusClass(status);
+          el.textContent = libName + '：' + status;
+          libList.appendChild(el);
+        });
+        if (sysData.reserveurl) {
+          const link = document.createElement('a');
+          link.href = sysData.reserveurl;
+          link.target = '_blank';
+          link.rel = 'noopener';
+          link.style.cssText = 'font-size:11px;color:var(--accent);margin-left:4px;';
+          link.textContent = '予約する →';
+          libList.appendChild(link);
+        }
+      } else if (sysData.status === 'Running') {
+        const el = document.createElement('span');
+        el.className = 'lib-item lib-running';
+        el.textContent = '確認中...';
+        libList.appendChild(el);
+      } else {
+        const el = document.createElement('span');
+        el.className = 'lib-item lib-none';
+        el.textContent = '蔵書なし';
+        libList.appendChild(el);
+      }
+    });
+
+    if (!hasAny && libList.children.length === 0) {
       libList.innerHTML = '<span class="lib-item lib-unknown">蔵書データなし</span>';
     }
 
