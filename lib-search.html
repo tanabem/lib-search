@@ -843,6 +843,9 @@ async function fetchCiNii(q) {
   const appid = localStorage.getItem('lskey_cinii') || '';
   if (!appid) throw new Error('APIキー未設定（APIキー設定から登録してください）');
 
+  // format=json でJSON-LD形式を取得
+  // JSON-LD仕様: title = item['title'], url = item['link']['@id']
+  // 参考: https://support.nii.ac.jp/ja/cir/r_opensearch
   const url = `https://cir.nii.ac.jp/opensearch/articles?appid=${encodeURIComponent(appid)}&q=${encodeURIComponent(q)}&count=10&format=json`;
   const res = await fetch(url);
   if (!res.ok) throw new Error(`CiNii API Error: ${res.status}`);
@@ -854,11 +857,19 @@ async function fetchCiNii(q) {
     if (item['prism:publicationName']) tags.push({ label: item['prism:publicationName'] });
     if (item['prism:publicationDate']) tags.push({ label: item['prism:publicationDate'] });
 
+    // JSON-LDでは著者は dc:creator 配列、タイトルは title（dc:titleではない）
     const authors = (item['dc:creator'] || []).join(', ');
+
+    // URLは link['@id']（文字列の場合と オブジェクトの場合に対応）
+    const linkObj = item['link'];
+    const itemUrl = (typeof linkObj === 'object' && linkObj !== null)
+      ? (linkObj['@id'] || '')
+      : (item['@id'] || '');
+
     return {
-      title: item['dc:title'],
-      meta: authors || '',
-      url: item['@id'] || '',
+      title: item['title'] || '（タイトル不明）',
+      meta: authors,
+      url: itemUrl,
       tags,
       thumbnail: null,
       isbn: null,
