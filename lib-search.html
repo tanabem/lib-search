@@ -540,7 +540,7 @@
     <span>🔑</span>
     <span>CiNii・カーリルにはAPIキーが必要です。</span>
     <a href="#" onclick="openKeyPanel(); return false;">APIキーを設定</a>
-    &nbsp;|&nbsp; NDL・Google Books・Semantic Scholarはキー不要
+    &nbsp;|&nbsp; NDL・OpenAlexはキー不要
   </div>
 </div>
 
@@ -554,6 +554,10 @@
     <div class="key-field">
       <label>CiNii Research APIキー（appid）</label>
       <input type="text" id="key_cinii" placeholder="例: xxxxxxxxxxxxxxxx" />
+    </div>
+    <div class="key-field">
+      <label>Google Books APIキー</label>
+      <input type="text" id="key_gbooks" placeholder="例: AIzaSy..." />
     </div>
     <div class="key-field">
       <label>カーリル APIキー</label>
@@ -572,7 +576,7 @@
   <div class="empty-msg">
     <div class="big">📚</div>
     <p>検索キーワードを入力して検索ボタンを押してください</p>
-    <p style="margin-top:8px;font-size:12px;color:var(--ink3)">CiNii Research・NDL・カーリル・Google Books・Semantic Scholar を横断検索</p>
+    <p style="margin-top:8px;font-size:12px;color:var(--ink3)">CiNii Research・NDL・カーリル・Google Books・OpenAlex を横断検索</p>
   </div>
 </div>
 
@@ -603,14 +607,14 @@ function init() {
 }
 
 function loadKeys() {
-  ['cinii','calil','calil_sys'].forEach(k => {
+  ['cinii','gbooks','calil','calil_sys'].forEach(k => {
     const el = document.getElementById('key_' + k);
     if (el) el.value = localStorage.getItem('lskey_' + k) || '';
   });
 }
 
 function saveKeys() {
-  ['cinii','calil','calil_sys'].forEach(k => {
+  ['cinii','gbooks','calil','calil_sys'].forEach(k => {
     const el = document.getElementById('key_' + k);
     if (el) localStorage.setItem('lskey_' + k, el.value.trim());
   });
@@ -937,9 +941,15 @@ async function fetchNDL(q) {
 // Docs: https://developers.google.com/books/docs/v1/using
 
 async function fetchGBooks(q) {
-  const url = `https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(q)}&maxResults=10&langRestrict=ja`;
+  const apiKey = localStorage.getItem('lskey_gbooks') || '';
+  const keyParam = apiKey ? `&key=${encodeURIComponent(apiKey)}` : '';
+  if (!apiKey) throw new Error('APIキー未設定（APIキー設定から登録してください）');
+  const url = `https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(q)}&maxResults=10&langRestrict=ja${keyParam}`;
   const res = await fetch(url);
-  if (!res.ok) throw new Error(`Google Books API Error: ${res.status}`);
+  if (!res.ok) {
+    if (res.status === 429) throw new Error('クォータ超過：Google Cloud Consoleで上限を確認してください');
+    throw new Error(`Google Books API Error: ${res.status}`);
+  }
   const data = await res.json();
 
   if (!data.items || data.items.length === 0) return { total_count: 0, items: [] };
